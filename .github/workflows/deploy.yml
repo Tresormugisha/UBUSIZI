@@ -1,0 +1,45 @@
+name: lambda-deploy
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  deploy_source:
+    name: build and deploy lambda
+    strategy:
+      matrix:
+        node: ['12']
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Configuring AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+      - name: Setting up node
+        uses: actions/setup-node@v1
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Installing dependencies
+        run: npm install
+      - name: Building the app
+        run: npm run build
+      - name: Moving node_modules to build/
+        run: mv node_modules build/node_modules
+      - name: Zipping the App
+        run: cd build && zip -qq -r ../bundle.zip * && cd ..
+      - name: Uploading the ZIP file to S3 bucket
+        run: aws s3 cp bundle.zip s3://imperium-lambda-deploys/ubusizi-api.zip
+      - name: Deploying the uploaded ZIP file to AWS Lambda
+        uses: appleboy/lambda-action@master
+        with:
+          aws_access_key_id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws_secret_access_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws_region: ${{ secrets.AWS_REGION }}
+          function_name: ubusizi-api
+          s3_bucket: imperium-lambda-deploys
+          s3_key: ubusizi-api.zip
